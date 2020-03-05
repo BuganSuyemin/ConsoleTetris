@@ -13,7 +13,7 @@ bool blocks[WIDTH][HEIGHT];
 bool activeBlock[4][4];
 bool configurations[7][4][4];
 int activeX, activeY;
-const int SLEEP_TICKS = 2;
+const int SLEEP_TICKS = 5;
 short action;
 
 void clearBuffer()
@@ -50,27 +50,6 @@ void actuallyDraw()
 	}
 }
 
-void rotateBlock(bool block[][4])
-{
-	bool t[4][4];
-
-	for (int i = 0; i < 4; i++)
-	{
-		for (int j = 0; j < 4; j++)
-		{
-			t[i][j] = block[j][3 - i];
-		}
-	}
-
-	for (int i = 0; i < 4; i++)
-	{
-		for (int j = 0; j < 4; j++)
-		{
-			block[i][j] = t[i][j];
-		}
-	}
-}
-
 void normalizeBlock(bool block[][4])
 {
 	while (1)
@@ -101,6 +80,29 @@ outer:
 	return;
 }
 
+void rotateAndNormalizeBlock(bool block[][4])
+{
+	bool t[4][4];
+
+	for (int i = 0; i < 4; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			t[i][j] = block[j][3 - i];
+		}
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			block[i][j] = t[i][j];
+		}
+	}
+
+	normalizeBlock(block);
+}
+
 void addToList(bool list[][4][4], int index, bool block[4][4])
 {
 	for (int i = 0; i < 4; i++)
@@ -111,48 +113,42 @@ void addToList(bool list[][4][4], int index, bool block[4][4])
 void generatePossibleBlockConfigurations(bool list[4][4][4])
 {
 	bool a[4][4] = { 1, 1, 1, 1 };
-	rotateBlock(a);
-	normalizeBlock(a);
+	rotateAndNormalizeBlock(a);
 	addToList(list, 0, a);
 
 	bool b[4][4] = { 1, 1, 0, 0, 1, 1 };
-	rotateBlock(b);
-	normalizeBlock(b);
+	rotateAndNormalizeBlock(b);
 	addToList(list, 1, b);
 
 	bool c[4][4] = { 1, 1, 1, 0, 0, 1 };
-	rotateBlock(c);
-	normalizeBlock(c);
+	rotateAndNormalizeBlock(c);
 	addToList(list, 2, c);
 
 	bool d[4][4] = { 1, 1, 1, 0, 0, 0, 1 };
-	rotateBlock(d);
-	normalizeBlock(d);
+	rotateAndNormalizeBlock(d);
 	addToList(list, 3, d);
 
 	bool e[4][4] = { 1, 1, 1, 0, 1 };
-	rotateBlock(e);
-	normalizeBlock(e);
+	rotateAndNormalizeBlock(e);
 	addToList(list, 4, e);
 
 	bool f[4][4] = { 0, 1, 1, 0, 1, 1 };
-	rotateBlock(f);
-	normalizeBlock(f);
+	rotateAndNormalizeBlock(f);
 	addToList(list, 5, f);
 
 	bool g[4][4] = { 1, 1, 0, 0, 0, 1, 1 };
-	rotateBlock(g);
-	normalizeBlock(g);
+	rotateAndNormalizeBlock(g);
 	addToList(list, 6, g);
 }
 
-bool blockCantFall()
+bool blockCanFall()
 {
 	for (int i = 0; i < 4; i++)
 		for (int j = 0; j < 4; j++)
-			if ((activeBlock[i][j] && j + 1 + activeY == HEIGHT) || (activeBlock[i][j] && blocks[i + activeX][j + activeY + 1]))
-				return true;
-	return false;
+			if ((activeBlock[i][j] && j + 1 + activeY == HEIGHT) 
+				|| (activeBlock[i][j] && blocks[i + activeX][j + activeY + 1]))
+				return 0;
+	return 1;
 }
 
 void handleFall()
@@ -196,12 +192,35 @@ void clearLines()
 			for (int i1 = 0; i1 < WIDTH; i1++)
 			{
 				for (int j1 = j; j1 > 0; j1--)
-					blocks[i1][j1] = blocks[i1][j - 1];
-				
+					blocks[i1][j1] = blocks[i1][j1 - 1];
+
 				blocks[i1][0] = 0;
 			}
 		}
 	}
+}
+
+void tryRotateAndNormalizeActive() 
+{
+	bool t[4][4];
+
+	for (int i = 0; i < 4; i++)
+		for (int j = 0; j < 4; j++)
+			t[i][j] = activeBlock[i][j];
+
+	rotateAndNormalizeBlock(t);
+
+	for (int i = 0; i < 4; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			if ( (t[i][j] &&( i + activeX >= WIDTH || j + activeY >= HEIGHT))
+					|| (t[i][j] && blocks[i + activeX][j + activeY]))
+				return;
+		}
+	}
+
+	rotateAndNormalizeBlock(activeBlock);
 }
 
 int tick = 0;
@@ -216,26 +235,35 @@ void update()
 					drawBlock(i, 5*l + j);*/
 
 
-	if (action == 1 && canMove(action))
+	if ((action & 0x0001) == 0x0001 && canMove(1))
 		activeX--;
-	if (action == 2 && canMove(action))
+	if ((action & 0x0010) == 0x0010 && canMove(2))
 		activeX++;
 
-	if (tick == SLEEP_TICKS)
-	{
-		tick = 1;
+	if ((action & 0x0100) == 0x0100)
+		tryRotateAndNormalizeActive();
 
-		if (blockCantFall())
-		{
-			handleFall();
-			clearLines();
-		}
-		else
+	if (action == 0x1000) 
+	{
+		while (blockCanFall())
 		{
 			activeY++;
 		}
 	}
 
+	if (tick == SLEEP_TICKS)
+	{ 
+		tick = 1;
+
+		if (blockCanFall())
+			activeY++;
+		else
+		{
+			handleFall();
+			clearLines();
+
+		}
+	}
 
 	for (int i = 0; i < 4; i++)
 		for (int j = 0; j < 4; j++)
@@ -268,14 +296,18 @@ int main()
 		clearBuffer();
 
 		if (GetKeyState('A') & 0x8000)
-			action = 1;
+			action = 0x0001;
 		if (GetKeyState('D') & 0x8000)
-			action = 2;
+			action = 0x0010;
+		if (GetKeyState('W') & 0x8000)
+			action |= 0x0100;
+		if (GetKeyState('S') & 0x8000)
+			action = 0x1000;
 
 		update();
 
 		action = 0;
 		actuallyDraw();
-		Sleep(300);
+		Sleep(50);
 	}
 }
